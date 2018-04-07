@@ -1,49 +1,90 @@
 import numpy as np
 from physics_sim import PhysicsSim
 
-class Task():
-    """Task (environment) that defines the goal and provides feedback to the agent."""
-    def __init__(self, init_pose=None, init_velocities=None, 
-        init_angle_velocities=None, runtime=5., target_pos=None):
-        """Initialize a Task object.
-        Params
-        ======
-            init_pose: initial position of the quadcopter in (x,y,z) dimensions and the Euler angles
-            init_velocities: initial velocity of the quadcopter in (x,y,z) dimensions
-            init_angle_velocities: initial radians/second for each of the three Euler angles
-            runtime: time limit for each episode
-            target_pos: target/goal (x,y,z) position for the agent
-        """
-        # Simulation
-        self.sim = PhysicsSim(init_pose, init_velocities, init_angle_velocities, runtime) 
-        self.action_repeat = 3
 
-        self.state_size = self.action_repeat * 6
+class Task():
+    """
+    Task (environment) that defines the goal and provides feedback to the agent.
+    """
+
+    def __init__(self, init_state, target_state, runtime=5.0, action_repeats=3):
+        """
+        Initialize a Task object.
+
+        The initial and target states should be iterables with 12 float items
+        that represent:
+          - pose (x, y, z, phi, theta, psi)
+          - velocities (x_v, y_v, z_v)
+          - angle velocities (phi_v, theta_v, psi_v)
+
+        :param tuple init_state: The initial state of the quadcopter
+        :param tuple target_state: The target state of the quadcopter
+        :param float runtime: Time limit for each episode
+        :param int action_repeats: Number of times to repeat an action
+        """
+        assert len(init_state) == 12
+        assert len(target_state) == 12
+
+        # Initialize the state arrays
+        self.current_state = np.array(init_state, dtype=np.float64)
+        self.target_state = np.array(target_state, dtype=np.float64)
+        self.action_repeats = action_repeats
+
+        # We're sharing current_state with the simulator so that we don't
+        # need to constantly copy the data from the simulator into the current
+        # state
+        self.sim = PhysicsSim(
+            self.current_state[:6],
+            self.current_state[6:9],
+            self.current_state[9:],
+            runtime
+        )
+
+        self.current_state_size = len(self.current_state)
+        self.state_size = self.current_state_size * self.action_repeats
+        self.action_size = 4
         self.action_low = 0
         self.action_high = 900
-        self.action_size = 4
-
-        # Goal
-        self.target_pos = target_pos if target_pos is not None else np.array([0., 0., 10.]) 
-
-    def get_reward(self):
-        """Uses current pose of sim to return reward."""
-        reward = 1.-.3*(abs(self.sim.pose[:3] - self.target_pos)).sum()
-        return reward
-
-    def step(self, rotor_speeds):
-        """Uses action to obtain next state, reward, done."""
-        reward = 0
-        pose_all = []
-        for _ in range(self.action_repeat):
-            done = self.sim.next_timestep(rotor_speeds) # update the sim pose and velocities
-            reward += self.get_reward() 
-            pose_all.append(self.sim.pose)
-        next_state = np.concatenate(pose_all)
-        return next_state, reward, done
 
     def reset(self):
-        """Reset the sim to start a new episode."""
+        """
+        Reset the sim to start a new episode.
+        """
         self.sim.reset()
-        state = np.concatenate([self.sim.pose] * self.action_repeat) 
-        return state
+        return np.repeat(self.current_state, self.action_repeats)
+
+    def get_reward(self):
+        """
+        Use current state to compute the reward.
+
+        We compute the reward as a function of the error between the current
+        state and the target state. The position has the biggest weight in the
+        reward but we also reward the angles and the two velocities.
+        """
+        error = abs(self.current_state - self.target_state)
+        position_error = error[:3].sum()
+        angular_error = error[3:6].sum()
+        velocity_error = error[6:9].sum()
+        angular_velocity_error = error[9:].sum()
+
+        return (
+            1.0
+            - 0.8 * position_error
+            - 0.2 * angular_error
+            - 0.1 * velocity_error
+            - 0.1 * angular_velocity_error
+        )
+
+    def step(self, rotor_speeds):
+        """
+        Use action to obtain next state, reward, and done.
+        """
+        reward = 0
+        all_states = np.zeros(self.state_size)
+
+        for i in range(0, self.state_size, self.current_state_size):
+            done = self.sim.next_timestep(rotor_speeds)
+            reward += self.get_reward()
+            all_states[i:i + self.current_state_size] = self.current_state
+
+        return all_states, reward, done
