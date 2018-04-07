@@ -23,12 +23,23 @@ def body_to_earth_frame(ii, jj, kk):
     return np.transpose(earth_to_body_frame(ii, jj, kk))
 
 
+def _safe_default(value, default):
+    return value if value is not None else default
+
+
 class PhysicsSim():
     def __init__(self, init_pose=None, init_velocities=None, init_angle_velocities=None, runtime=5.):
-        self.init_pose = init_pose
-        self.init_velocities = init_velocities
-        self.init_angle_velocities = init_angle_velocities
+        # Initialize the current states from the provided init states
+        # reusing the same numpy arrays as passed from the caller
+        self.pose = _safe_default(init_pose, np.array([0.0, 0.0, 10.0, 0.0, 0.0, 0.0]))
+        self.v = _safe_default(init_velocities, np.zeros(3))
+        self.angular_v = _safe_default(init_angle_velocities, np.zeros(3))
         self.runtime = runtime
+
+        # Keep a copy of the initial states to use when reseting the simulation
+        self.init_pose = np.copy(self.pose)
+        self.init_velocities = np.copy(self.v)
+        self.init_angle_velocities = np.copy(self.angular_v)
 
         self.gravity = -9.81  # m/s
         self.rho = 1.2
@@ -53,12 +64,12 @@ class PhysicsSim():
 
     def reset(self):
         self.time = 0.0
-        self.pose = np.array([0.0, 0.0, 10.0, 0.0, 0.0, 0.0]) if self.init_pose is None else self.init_pose
-        self.v = np.array([0.0, 0.0, 0.0]) if self.init_velocities is None else self.init_velocities
-        self.angular_v = np.array([0.0, 0.0, 0.0]) if self.init_angle_velocities is None else self.init_angle_velocities
-        self.linear_accel = np.array([0.0, 0.0, 0.0])
-        self.angular_accels = np.array([0.0, 0.0, 0.0])
-        self.prop_wind_speed = np.array([0., 0., 0., 0.])
+        self.pose[:] = self.init_pose
+        self.v[:] = self.init_velocities
+        self.angular_v[:] = self.init_angle_velocities
+        self.linear_accel = np.zeros(3)
+        self.angular_accels = np.zeros(3)
+        self.prop_wind_speed = np.zeros(4)
         self.done = False
 
     def find_body_velocity(self):
@@ -130,7 +141,7 @@ class PhysicsSim():
         self.angular_accels = moments / self.moments_of_inertia
         angles = self.pose[3:] + self.angular_v * self.dt + 0.5 * self.angular_accels * self.angular_accels * self.dt
         angles = (angles + 2 * np.pi) % (2 * np.pi)
-        self.angular_v = self.angular_v + self.angular_accels * self.dt
+        self.angular_v += self.angular_accels * self.dt
 
         new_positions = []
         for ii in range(3):
@@ -143,7 +154,8 @@ class PhysicsSim():
             else:
                 new_positions.append(position[ii])
 
-        self.pose = np.array(new_positions + list(angles))
+        self.pose[:3] = new_positions
+        self.pose[3:] = list(angles)
         self.time += self.dt
         if self.time > self.runtime:
             self.done = True
