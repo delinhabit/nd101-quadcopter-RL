@@ -31,7 +31,7 @@ class PhysicsSim():
     def __init__(self, init_pose=None, init_velocities=None, init_angle_velocities=None, runtime=5.):
         # Initialize the current states from the provided init states
         # reusing the same numpy arrays as passed from the caller
-        self.pose = _safe_default(init_pose, np.array([0.0, 0.0, 10.0, 0.0, 0.0, 0.0]))
+        self.pose = _safe_default(init_pose, np.zeros(6))
         self.v = _safe_default(init_velocities, np.zeros(3))
         self.angular_v = _safe_default(init_angle_velocities, np.zeros(3))
         self.runtime = runtime
