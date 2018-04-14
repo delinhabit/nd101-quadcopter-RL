@@ -10,6 +10,8 @@ class Actor():
         self.action_low = action_low
         self.action_high = action_high
         self.action_range = self.action_high - self.action_low
+        self.dropout_rate = 0.2
+        self.hidden_size = 16
         self._build_model()
 
     def _build_model(self):
@@ -20,9 +22,12 @@ class Actor():
         states = layers.Input(shape=(self.state_size,), name='states')
 
         # Add hidden layers
-        net = layers.Dense(units=32, activation='relu')(states)
-        net = layers.Dense(units=64, activation='relu')(net)
-        net = layers.Dense(units=32, activation='relu')(net)
+        net = layers.Dense(units=self.hidden_size, activation='relu')(states)
+        net = layers.Dropout(self.dropout_rate)(net)
+        net = layers.Dense(units=self.hidden_size * 2, activation='relu')(net)
+        net = layers.Dropout(self.dropout_rate)(net)
+        net = layers.Dense(units=self.hidden_size, activation='relu')(net)
+        net = layers.Dropout(self.dropout_rate)(net)
 
         # Add final output layer with sigmoid activation
         raw_actions = layers.Dense(

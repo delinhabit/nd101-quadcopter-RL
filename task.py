@@ -40,21 +40,22 @@ class Task():
             done = self.sim.next_timestep(rotor_speeds) # update the sim pose and velocities
             reward += self.get_reward()
             pose_all.append(self.sim.pose)
-        next_state = np.concatenate(pose_all).reshape((1, self.state_size))
+        next_state = np.concatenate(pose_all)
         return next_state, reward, done
 
     def reset(self):
         """Reset the sim to start a new episode."""
         self.sim.reset()
         state = np.concatenate([self.sim.pose] * self.action_repeat)
-        return state.reshape((1, self.state_size))
+        return state
 
 
 class TakeOffTask(Task):
 
     def get_reward(self):
-        return (
+        reward = (
             1.0
-            - 0.3 * abs(self.sim.pose[2] - self.target_pos[2]).sum()
-            - 0.1 * self.sim.v[2]
+            + 0.3 * min((self.sim.pose[2] - self.target_pos[2]).sum(), 0)
+            + 0.3 * self.sim.v[2]
         )
+        return np.tanh(reward)

@@ -7,6 +7,8 @@ class Critic():
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
+        self.dropout_rate = 0.2
+        self.hidden_size = 16
         self._build_model()
 
     def _build_model(self):
@@ -19,12 +21,16 @@ class Critic():
         actions = layers.Input(shape=(self.action_size,), name='actions')
 
         # Add hidden layer(s) for state pathway
-        net_states = layers.Dense(units=32, activation='relu')(states)
-        net_states = layers.Dense(units=64, activation='relu')(net_states)
+        net_states = layers.Dense(units=self.hidden_size, activation='relu')(states)
+        net_states = layers.Dropout(self.dropout_rate)(net_states)
+        net_states = layers.Dense(units=self.hidden_size * 2, activation='relu')(net_states)
+        net_states = layers.Dropout(self.dropout_rate)(net_states)
 
         # Add hidden layer(s) for action pathway
-        net_actions = layers.Dense(units=32, activation='relu')(actions)
-        net_actions = layers.Dense(units=64, activation='relu')(net_actions)
+        net_actions = layers.Dense(units=self.hidden_size, activation='relu')(actions)
+        net_actions = layers.Dropout(self.dropout_rate)(net_actions)
+        net_actions = layers.Dense(units=self.hidden_size * 2, activation='relu')(net_actions)
+        net_actions = layers.Dropout(self.dropout_rate)(net_actions)
 
         # Combine state and action pathways
         net = layers.Add()([net_states, net_actions])
